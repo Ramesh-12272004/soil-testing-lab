@@ -1,172 +1,203 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO, StringIO # Import StringIO for CSV buffer
+import matplotlib.pyplot as plt
+from io import BytesIO
+from docx import Document
+from docx.shared import Inches
+from datetime import datetime
 
-# The main function that will be called by app.py
 def run():
-    st.subheader("Constant Head Permeability Test (IS 2720: Part 36: 1987)")
-    st.markdown("This test is used to determine the coefficient of permeability for coarse-grained soils like sand and gravel.")
 
-    # Initialize session state for the number of trials if not already set
-    if "ch_num_trials" not in st.session_state:
-        st.session_state.ch_num_trials = 3
+    st.header("🧪 Constant Head Permeability Test")
+    st.caption("IS 2720 (Part 36): 1987")
 
-    # Number of Trials input
-    num_trials = st.number_input(
-        "Number of Trials",
-        min_value=1,
-        max_value=10,
-        value=st.session_state.ch_num_trials,
-        step=1,
-        key="ch_num_trials_input"
-    )
+    # ---------------- SESSION STATE ----------------
+    if "ch_results" not in st.session_state:
+        st.session_state.ch_results = None
 
-    # Update session state if the number of trials changes
-    if num_trials != st.session_state.ch_num_trials:
-        st.session_state.ch_num_trials = num_trials
-        # Reinitialize inputs if num_trials changes significantly
-        st.session_state.constant_head_inputs = [
-            {"length": 0.0, "area": 0.0, "head": 0.0, "volume": 0.0, "time": 0.0, "temperature": 27.0}
-            for _ in range(num_trials)
-        ]
+    if "ch_avg_k" not in st.session_state:
+        st.session_state.ch_avg_k = None
 
-    # Initialize session state for storing inputs if not already set
-    if "constant_head_inputs" not in st.session_state:
-        st.session_state.constant_head_inputs = [
-            {"length": 0.0, "area": 0.0, "head": 0.0, "volume": 0.0, "time": 0.0, "temperature": 27.0}
-            for _ in range(num_trials)
-        ]
-    # Ensure the list size matches the current num_trials
-    while len(st.session_state.constant_head_inputs) < num_trials:
-        st.session_state.constant_head_inputs.append(
-            {"length": 0.0, "area": 0.0, "head": 0.0, "volume": 0.0, "time": 0.0, "temperature": 27.0}
-        )
-    st.session_state.constant_head_inputs = st.session_state.constant_head_inputs[:num_trials]
+    if "ch_soil" not in st.session_state:
+        st.session_state.ch_soil = None
 
+    if "ch_graph" not in st.session_state:
+        st.session_state.ch_graph = None
 
-    # Collect inputs for each trial using session state
-    for i in range(num_trials):
-        st.markdown(f"### Trial {i + 1}")
+    # ---------------- PROCEDURE ----------------
+    with st.expander("📘 View Detailed Procedure"):
+        st.markdown("""
+### Objective
+To determine the coefficient of permeability (k) of coarse-grained soil.
+
+### Formula
+k = (Q × L) / (A × h × t)
+
+### Steps
+1. Prepare soil specimen.
+2. Apply constant head.
+3. Collect discharge.
+4. Calculate permeability.
+""")
+
+    # ---------------- INPUT ----------------
+    trials = st.number_input("Number of Trials", 1, 10, 3)
+
+    data = []
+
+    for i in range(trials):
+        st.subheader(f"Trial {i+1}")
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.session_state.constant_head_inputs[i]["length"] = st.number_input(
-                f"Length of specimen L (cm) - Trial {i+1}",
-                key=f"ch_length{i}",
-                value=st.session_state.constant_head_inputs[i]["length"]
+            L = st.number_input(
+                f"L (cm) - T{i+1}",
+                value=0.0,
+                step=0.01,
+                format="%.3f",
+                key=f"L{i}"
             )
-            st.session_state.constant_head_inputs[i]["area"] = st.number_input(
-                f"Cross-sectional area A (cm²) - Trial {i+1}",
-                key=f"ch_area{i}",
-                value=st.session_state.constant_head_inputs[i]["area"]
+
+            A = st.number_input(
+                f"A (cm²) - T{i+1}",
+                value=0.0,
+                step=0.01,
+                format="%.3f",
+                key=f"A{i}"
             )
+
         with col2:
-            st.session_state.constant_head_inputs[i]["head"] = st.number_input(
-                f"Constant head h (cm) - Trial {i+1}",
-                key=f"ch_head{i}",
-                value=st.session_state.constant_head_inputs[i]["head"]
+            h = st.number_input(
+                f"h (cm) - T{i+1}",
+                value=0.0,
+                step=0.01,
+                format="%.3f",
+                key=f"h{i}"
             )
-            st.session_state.constant_head_inputs[i]["volume"] = st.number_input(
-                f"Volume of water collected Q (cm³) - Trial {i+1}",
-                key=f"ch_volume{i}",
-                value=st.session_state.constant_head_inputs[i]["volume"]
+
+            Q = st.number_input(
+                f"Q (cm³) - T{i+1}",
+                value=0.0,
+                step=0.01,
+                format="%.3f",
+                key=f"Q{i}"
             )
+
         with col3:
-            st.session_state.constant_head_inputs[i]["time"] = st.number_input(
-                f"Time t (s) - Trial {i+1}",
-                key=f"ch_time{i}",
-                value=st.session_state.constant_head_inputs[i]["time"]
-            )
-            st.session_state.constant_head_inputs[i]["temperature"] = st.number_input(
-                f"Water temperature (°C) - Trial {i+1}",
-                key=f"ch_temp{i}",
-                value=st.session_state.constant_head_inputs[i]["temperature"]
+            t = st.number_input(
+                f"t (s) - T{i+1}",
+                value=0.0,
+                step=0.01,
+                format="%.3f",
+                key=f"t{i}"
             )
 
-    # --- Save Inputs Button ---
-    if st.button("💾 Save Inputs", key="save_ch_inputs_button"):
-        input_df = pd.DataFrame(st.session_state.constant_head_inputs)
-        buffer = StringIO()
-        input_df.to_csv(buffer, index=False)
-        buffer.seek(0)
-
-        st.download_button(
-            label="📥 Download Input Data as CSV",
-            data=buffer.getvalue(),
-            file_name="constant_head_inputs.csv",
-            mime="text/csv"
-        )
-
-    # --- Calculate Results Button ---
-    if st.button("Calculate Results", key="calculate_ch_results_button"):
-        calculated_trial_data = []
-        for i, trial_input in enumerate(st.session_state.constant_head_inputs):
-            length = trial_input["length"]
-            area = trial_input["area"]
-            head = trial_input["head"]
-            volume = trial_input["volume"]
-            time = trial_input["time"]
-            temperature = trial_input["temperature"] # Not used in k calculation, but good to store
-
-            if length > 0 and area > 0 and head > 0 and volume > 0 and time > 0:
-                k = (volume * length) / (area * head * time)  # in cm/s
-                k_mps = k / 100  # convert to m/s
-
-                # Soil type classification based on permeability (in cm/s)
-                if k > 1e-1:
-                    soil_type = "Gravel"
-                elif 1e-2 < k <= 1e-1:
-                    soil_type = "Coarse Sand"
-                elif 1e-3 < k <= 1e-2:
-                    soil_type = "Medium Sand"
-                elif 1e-4 < k <= 1e-3:
-                    soil_type = "Fine Sand"
-                elif 1e-6 < k <= 1e-4:
-                    soil_type = "Silt"
-                else:
-                    soil_type = "Clay"
-
-                calculated_trial_data.append({
-                    "Trial": i + 1,
-                    "Length (cm)": length,
-                    "Area (cm²)": area,
-                    "Head (cm)": head,
-                    "Volume (cm³)": volume,
-                    "Time (s)": time,
-                    "k (cm/s)": round(k, 5),
-                    "k (m/s)": f"{k_mps:.2e}",
-                    "Soil Type": soil_type
-                })
-            else:
-                st.warning(f"Trial {i+1}: Please ensure all input values (Length, Area, Head, Volume, Time) are greater than zero to calculate permeability.")
-
-        if calculated_trial_data:
-            results_df = pd.DataFrame(calculated_trial_data)
-            st.markdown("### 📋 Results Table")
-            st.dataframe(results_df, use_container_width=True)
-
-            avg_k_cm_s = results_df["k (cm/s)"].mean()
-            avg_k_m_s = avg_k_cm_s / 100
-
-            st.success(f"**Average Coefficient of Permeability (k)**: {avg_k_cm_s:.5f} cm/s or {avg_k_m_s:.2e} m/s")
-
-            st.markdown("### 🧪 Interpretation Table (Typical k values)")
-            interp_df = pd.DataFrame({
-                "Soil Type": ["Gravel", "Sand (coarse)", "Sand (medium)", "Sand (fine)", "Silt", "Clay"],
-                "Typical k (cm/s)": [">10⁻¹", "10⁻² to 10⁻¹", "10⁻³ to 10⁻²", "10⁻⁴ to 10⁻³", "10⁻⁵ to 10⁻⁶", "<10⁻⁷"]
-            })
-            st.table(interp_df)
-
-            # Return results for the main app to collect
-            return {
-                "Test Data": results_df,
-                "Average k (cm/s)": f"{avg_k_cm_s:.5f}",
-                "Average k (m/s)": f"{avg_k_m_s:.2e}",
-                "Interpretation Table": interp_df,
-                "Remarks": "Coefficient of permeability determined using the Constant Head method, suitable for coarse-grained soils."
-            }
+        if L > 0 and A > 0 and h > 0 and Q > 0 and t > 0:
+            k = (Q * L) / (A * h * t)
         else:
-            st.error("No valid trial data to calculate results. Please check your inputs.")
-            return None # Return None if no valid data
-    
-    return None # Return None initially or if calculation button not pressed
+            k = 0
+
+        data.append([L, A, h, Q, t, k])
+
+    # ---------------- CALCULATE ----------------
+    if st.button("📊 Calculate"):
+
+        df = pd.DataFrame(data, columns=[
+            "Length (cm)", "Area (cm²)", "Head (cm)",
+            "Volume (cm³)", "Time (s)", "k (cm/s)"
+        ])
+
+        df["k (m/s)"] = df["k (cm/s)"] / 100
+
+        avg_k = df["k (cm/s)"].mean()
+
+        # Soil classification
+        if avg_k > 1e-1:
+            soil = "Gravel"
+        elif avg_k > 1e-2:
+            soil = "Coarse Sand"
+        elif avg_k > 1e-3:
+            soil = "Medium Sand"
+        elif avg_k > 1e-4:
+            soil = "Fine Sand"
+        elif avg_k > 1e-6:
+            soil = "Silt"
+        else:
+            soil = "Clay"
+
+        # Graph
+        fig, ax = plt.subplots()
+        ax.plot(range(1, trials+1), df["k (cm/s)"], marker='o')
+        ax.set_xlabel("Trial Number")
+        ax.set_ylabel("k (cm/s)")
+        ax.set_title("Permeability vs Trial")
+        ax.grid(True)
+
+        img_stream = BytesIO()
+        fig.savefig(img_stream, format="png")
+        img_stream.seek(0)
+
+        # Save state
+        st.session_state.ch_results = df
+        st.session_state.ch_avg_k = avg_k
+        st.session_state.ch_soil = soil
+        st.session_state.ch_graph = img_stream
+
+    # ---------------- DISPLAY RESULTS ----------------
+    if st.session_state.ch_results is not None:
+
+        st.subheader("📋 Results")
+        st.dataframe(st.session_state.ch_results.style.format(precision=5))
+
+        st.success(f"Average k = {st.session_state.ch_avg_k:.5f} cm/s")
+        st.info(f"Soil Type: {st.session_state.ch_soil}")
+
+        st.image(st.session_state.ch_graph)
+
+        # ---------------- WORD REPORT ----------------
+        if st.button("📄 Generate Word Report"):
+
+            df = st.session_state.ch_results
+            avg_k = st.session_state.ch_avg_k
+            soil = st.session_state.ch_soil
+            graph = st.session_state.ch_graph
+
+            doc = Document()
+            doc.add_heading("Constant Head Permeability Test Report", 0)
+            doc.add_paragraph("IS 2720 (Part 36): 1987")
+            doc.add_paragraph(f"Date: {datetime.now().strftime('%d-%m-%Y')}")
+
+            doc.add_heading("Results", 1)
+
+            table = doc.add_table(rows=1, cols=len(df.columns))
+            for i, col in enumerate(df.columns):
+                table.rows[0].cells[i].text = col
+
+            for _, row in df.iterrows():
+                cells = table.add_row().cells
+                for i, val in enumerate(row):
+                    cells[i].text = f"{val:.5f}"
+
+            doc.add_paragraph(f"\nAverage k = {avg_k:.5f} cm/s")
+            doc.add_paragraph(f"Soil Type: {soil}")
+
+            doc.add_heading("Conclusion", 1)
+            doc.add_paragraph(
+                f"The coefficient of permeability is {avg_k:.5f} cm/s, indicating {soil} soil."
+            )
+
+            graph.seek(0)
+            doc.add_picture(graph, width=Inches(5))
+
+            buffer = BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+
+            st.download_button(
+                "📥 Download Report",
+                data=buffer,
+                file_name="Constant_Head_Report.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+    return None

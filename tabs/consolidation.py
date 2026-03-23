@@ -3,42 +3,105 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from io import BytesIO
-from docx import Document
 
 def run():
-    st.subheader("🧪 Consolidation Test (IS 2720 Part 15:1986)")
 
-    # Sample dimensions
-    h0 = st.number_input("Initial height of soil sample (cm)", value=2.0, min_value=0.1)
-    d = st.number_input("Diameter of soil sample (cm)", value=6.0, min_value=0.1)
-    dial_lc = st.number_input("Dial gauge least count (mm/div)", value=0.01)
+    st.header("Consolidation Test")
+    st.caption("As per IS 2720 (Part 15): 1986")
+
+    # --------------------------------------------------
+    # PROCEDURE
+    # --------------------------------------------------
+    with st.expander("📘 Test Procedure"):
+        procedure_text = """
+1. Prepare undisturbed soil sample in consolidation ring.
+2. Measure initial height and diameter.
+3. Apply load increments in stages.
+4. Record dial gauge readings at each increment.
+5. Compute settlement and void ratio.
+6. Plot e – log(P) curve.
+7. Determine Compression Index (Cc).
+"""
+        st.markdown(procedure_text)
+
+    # --------------------------------------------------
+    # FORMULAS
+    # --------------------------------------------------
+    with st.expander("📐 Formulas Used"):
+        formula_text = """
+Area of Sample:
+A = (π/4) × d²
+
+Settlement (mm):
+= (Final Reading − Initial Reading) × Least Count
+
+Strain:
+= Compression / Initial Height
+
+Void Ratio:
+e = e₀ − Strain × (1 + e₀)
+
+Compression Index (Cc):
+Slope of e – log(P) curve in virgin compression region
+
+Coefficient of Volume Compressibility (mv):
+mv = Δe / [(1 + e₀) × Δσ]
+"""
+        st.markdown(formula_text)
+
+    st.markdown("---")
+
+    # --------------------------------------------------
+    # INPUT SECTION
+    # --------------------------------------------------
+    st.subheader("🔧 Sample Details")
+
+    h0 = st.number_input("Initial Height (cm)", value=2.0, min_value=0.1)
+    d = st.number_input("Diameter (cm)", value=6.0, min_value=0.1)
+    dial_lc = st.number_input("Dial Gauge Least Count (mm/div)", value=0.01)
+    e0 = st.number_input("Initial Void Ratio (e₀)", value=0.9, min_value=0.0)
 
     A = (np.pi / 4) * d ** 2
-    st.info(f"Cross-sectional Area: {A:.2f} cm²")
+    st.info(f"Cross-sectional Area = {A:.2f} cm²")
 
-    # Initial void ratio input
-    e0 = st.number_input("Initial void ratio (e₀)", value=0.9, min_value=0.0)
+    st.subheader("📊 Load Increment Data")
 
-    # Input number of readings
-    num_readings = st.number_input("Number of Load Increments", min_value=1, max_value=20, value=6, step=1)
+    num_readings = st.number_input(
+        "Number of Load Increments",
+        min_value=2,
+        max_value=20,
+        value=6
+    )
 
     loads, init_readings, final_readings = [], [], []
 
-    st.markdown("### 📥 Enter Data for Each Load Increment")
     for i in range(num_readings):
-        st.markdown(f"#### 🔹 Load Increment {i+1}")
         col1, col2, col3 = st.columns(3)
         with col1:
-            load = st.number_input(f"Load (kg/cm²) {i+1}", key=f"load_{i}", format="%.3f")
+            load = st.number_input(
+                f"Load (kg/cm²) - {i+1}",
+                key=f"load_{i}"
+            )
         with col2:
-            init = st.number_input(f"Initial Reading (div) {i+1}", key=f"init_{i}", format="%.3f")
+            init = st.number_input(
+                f"Initial Reading (div) - {i+1}",
+                key=f"init_{i}"
+            )
         with col3:
-            final = st.number_input(f"Final Reading (div) {i+1}", key=f"final_{i}", format="%.3f")
+            final = st.number_input(
+                f"Final Reading (div) - {i+1}",
+                key=f"final_{i}"
+            )
+
         loads.append(load)
         init_readings.append(init)
         final_readings.append(final)
 
-    if st.button("📊 Calculate"):
+    # --------------------------------------------------
+    # CALCULATION
+    # --------------------------------------------------
+    if st.button("📈 Calculate Consolidation Results"):
+
         try:
             df = pd.DataFrame({
                 "Load (kg/cm²)": loads,
@@ -46,85 +109,91 @@ def run():
                 "Final Reading (div)": final_readings
             })
 
-            df["Settlement (mm)"] = (df["Final Reading (div)"] - df["Initial Reading (div)"]) * dial_lc
+            df["Settlement (mm)"] = (
+                (df["Final Reading (div)"] -
+                 df["Initial Reading (div)"]) * dial_lc
+            )
+
             df["Compression (cm)"] = df["Settlement (mm)"] / 10
             df["Strain"] = df["Compression (cm)"] / h0
-            df["Void Ratio"] = e0 - df["Strain"] * (1 + e0)
-            df = df[df["Void Ratio"] > 0]
+            df["Void Ratio (e)"] = e0 - df["Strain"] * (1 + e0)
+
+            df = df[df["Void Ratio (e)"] > 0]
+
             df["log(Load)"] = np.log10(df["Load (kg/cm²)"])
 
-            st.markdown("### 📋 Result Table")
+            st.subheader("📋 Result Table")
             st.dataframe(df.style.format(precision=4))
 
-            # Plot e-log P
-            st.markdown("### 📈 e – log(P) Curve")
+            # --------------------------------------------------
+            # GRAPH
+            # --------------------------------------------------
             fig, ax = plt.subplots()
-            ax.plot(df["log(Load)"], df["Void Ratio"], marker='o')
-            ax.set_xlabel("log(Load) [log(kg/cm²)]")
+            ax.plot(df["log(Load)"], df["Void Ratio (e)"], marker='o')
+            ax.set_xlabel("log(Load)")
             ax.set_ylabel("Void Ratio (e)")
             ax.set_title("e – log(P) Curve")
             ax.invert_yaxis()
             ax.grid(True)
+
+            image_stream = BytesIO()
+            plt.savefig(image_stream, format="png")
+            image_stream.seek(0)
+
             st.pyplot(fig)
 
-            # Calculate Compression Index (Cc)
+            # --------------------------------------------------
+            # Compression Index (Cc)
+            # --------------------------------------------------
             if len(df) >= 3:
-                slope, intercept = np.polyfit(df["log(Load)"].iloc[-3:], df["Void Ratio"].iloc[-3:], 1)
+                slope, intercept = np.polyfit(
+                    df["log(Load)"].iloc[-3:],
+                    df["Void Ratio (e)"].iloc[-3:], 1
+                )
                 Cc = -slope
-                st.success(f"**Compression Index (Cc)** ≈ {Cc:.4f}")
+                st.success(f"Compression Index (Cc) ≈ {Cc:.4f}")
             else:
-                st.warning("Not enough points to calculate Compression Index.")
+                Cc = None
+                st.warning("Not enough points to calculate Cc.")
 
+            # --------------------------------------------------
             # Coefficient of Volume Compressibility (mv)
+            # --------------------------------------------------
             if len(df) >= 2:
-                delta_e = df["Void Ratio"].iloc[1] - df["Void Ratio"].iloc[0]
-                delta_sigma = (df["Load (kg/cm²)"].iloc[1] - df["Load (kg/cm²)"].iloc[0]) * 0.98
-                mv = delta_e / (1 + e0) / delta_sigma
-                mv_cm2_per_kg = mv * 10000 / 0.98
-                st.success(f"**Coefficient of Volume Compressibility (mv)** ≈ {mv_cm2_per_kg:.6f} cm²/kg")
+                delta_e = df["Void Ratio (e)"].iloc[1] - df["Void Ratio (e)"].iloc[0]
+                delta_sigma = df["Load (kg/cm²)"].iloc[1] - df["Load (kg/cm²)"].iloc[0]
+                mv = delta_e / ((1 + e0) * delta_sigma)
+                st.success(f"Coefficient of Volume Compressibility (mv) ≈ {mv:.6f} cm²/kg")
             else:
+                mv = None
                 st.warning("Not enough data to calculate mv.")
 
-            if st.button("📥 Download Word Report"):
-                doc = Document()
-                doc.add_heading("Consolidation Test Report", 0)
-                doc.add_paragraph(f"Initial Height: {h0} cm")
-                doc.add_paragraph(f"Diameter: {d} cm")
-                doc.add_paragraph(f"Area: {A:.2f} cm²")
-                doc.add_paragraph(f"Initial Void Ratio (e₀): {e0}")
+            # --------------------------------------------------
+            # CONCLUSION
+            # --------------------------------------------------
+            if Cc:
+                if Cc < 0.1:
+                    conclusion = "Soil has low compressibility."
+                elif Cc < 0.3:
+                    conclusion = "Soil has moderate compressibility."
+                else:
+                    conclusion = "Soil has high compressibility."
+                st.info(conclusion)
+            else:
+                conclusion = "Insufficient data for compressibility classification."
 
-                table = doc.add_table(rows=1, cols=6)
-                hdr_cells = table.rows[0].cells
-                hdr_cells[0].text = "Load (kg/cm²)"
-                hdr_cells[1].text = "Initial Reading"
-                hdr_cells[2].text = "Final Reading"
-                hdr_cells[3].text = "Settlement (mm)"
-                hdr_cells[4].text = "Void Ratio"
-                hdr_cells[5].text = "log(Load)"
-
-                for _, row in df.iterrows():
-                    cells = table.add_row().cells
-                    cells[0].text = f"{row['Load (kg/cm²)']:.2f}"
-                    cells[1].text = f"{row['Initial Reading (div)']:.2f}"
-                    cells[2].text = f"{row['Final Reading (div)']:.2f}"
-                    cells[3].text = f"{row['Settlement (mm)']:.3f}"
-                    cells[4].text = f"{row['Void Ratio']:.4f}"
-                    cells[5].text = f"{row['log(Load)']:.4f}"
-
-                if 'Cc' in locals():
-                    doc.add_paragraph(f"\nCompression Index (Cc): {Cc:.4f}")
-                if 'mv_cm2_per_kg' in locals():
-                    doc.add_paragraph(f"Coefficient of Volume Compressibility (mv): {mv_cm2_per_kg:.6f} cm²/kg")
-
-                buffer = BytesIO()
-                doc.save(buffer)
-                buffer.seek(0)
-                st.download_button(
-                    label="📥 Download Consolidation Report",
-                    data=buffer,
-                    file_name="Consolidation_Test_Report.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
+            # --------------------------------------------------
+            # RETURN FOR COMBINED REPORT
+            # --------------------------------------------------
+            return {
+                "data": df,
+                "graph": image_stream,
+                "procedure": procedure_text,
+                "formulas": formula_text
+            }
 
         except Exception as e:
-            st.error(f"⚠️ Error: {e}")
+            st.error(f"Calculation Error: {e}")
+            return None
+
+    return None
