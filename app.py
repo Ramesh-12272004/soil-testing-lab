@@ -92,20 +92,14 @@ if "completed_tests" not in st.session_state:
 # --------------------------
 if not st.session_state.app_started:
 
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1, 2, 1])
 
     with col2:
-      ##  st.markdown('<div class="center-box">', unsafe_allow_html=True)
-
         st.image("assets/anits_logo.png", width=120)
-
-       ## st.markdown("## ANITS")
         st.title("Anil Neerukonda Institute of Technology and Sciences")
         st.markdown("#### Department of Civil Engineering")
         st.markdown("### 🧪 Soil Testing & Analysis System")
         st.markdown("> *Understanding soil is the foundation of every great structure.*")
-
-        st.markdown("</div>", unsafe_allow_html=True)
 
         if st.button("🚀 Start Soil Testing", use_container_width=True):
             st.session_state.app_started = True
@@ -118,7 +112,6 @@ else:
 
     # Sidebar
     st.sidebar.image("assets/anits_logo.png", width=120)
-
     st.sidebar.title("ANITS Civil Dept")
     st.sidebar.subheader("Soil Tests")
 
@@ -172,7 +165,7 @@ else:
                 for line in result["formulas"].split("\n"):
                     doc.add_paragraph(line.strip())
 
-            # Input / Data Table
+            # Data Table
             if "data" in result and isinstance(result["data"], pd.DataFrame):
                 df = result["data"]
 
@@ -192,12 +185,12 @@ else:
             if "graph" in result and result["graph"] is not None:
                 doc.add_heading("Graph", 2)
                 try:
-                    result["graph"].seek(0)  # ✅ FIX
+                    result["graph"].seek(0)
                     doc.add_picture(result["graph"], width=Inches(5))
                 except:
                     pass
 
-            # Diagram (if any)
+            # Diagram
             if "diagram" in result and result["diagram"] is not None:
                 doc.add_heading("Diagram", 2)
                 try:
